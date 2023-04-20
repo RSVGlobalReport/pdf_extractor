@@ -1,4 +1,4 @@
-"","variable","Anzahl eingesandter Proben*","RSV","weekN","vintage","year","date"
+"","variable","N_tests","RSV","weekN","vintage","year","date"
 "1","V2","350","59",49,"2023-1",2022,2022-12-04
 "2","V3","355","50",50,"2023-1",2022,2022-12-11
 "3","V4","200","31",51,"2023-1",2022,2022-12-18

@@ -24,6 +24,8 @@ library(dplyr)
 library(tabulizer)
 library(magrittr)
 library(pbapply)
+library(ggplot2)
+library(MMWRweek)
 ```
 
 
@@ -60,22 +62,26 @@ fr_extract()
 
 
 ```{r}
-extract_fun_germ <- function(weekN){
-  weekN.pad <- str_pad(weekN, 2, pad = "0")
+extract_fun_germ <- function(set.weekN){
+  weekN.pad <- str_pad(set.weekN, 2, pad = "0")
 
   files.to.extract22_23 <- paste0("https://influenza.rki.de/Wochenberichte/2022_2023/","2023-",weekN.pad,'.pdf')
 
   out <- extract_tables(files.to.extract22_23,pages = 4) %>%
     extract2(1) %>%
-    as.data.frame() %>%
-    dplyr::filter(V1 %in% c('Anzahl eingesandter Proben*','RSV')) %>%
-    dplyr::select(V6) %>%
-    rename(N_current = V6) %>%
-    dplyr::mutate(N_current = as.numeric(N_current)) %>%
-    t() %>%
-    as.data.frame() %>%
-    rename(N_tests=V1, N_RSV=V2) %>%
-    mutate(wk=weekN)
+    as.data.frame() 
+  
+   out[2,1] <- 'weekN'
+   
+   out <- out %>%
+    dplyr::filter(V1 %in% c('Anzahl eingesandter Proben*','RSV','weekN')) %>%
+     reshape2::melt(.,id.vars='V1') %>%
+     reshape2::dcast(., variable~V1) %>%
+      filter(weekN != '') %>%
+      mutate(weekN= as.numeric(gsub("[^0-9.]", "", weekN)), vintage=paste0('2023-', set.weekN), 
+             year = if_else(weekN<= 26, 2023, 2022),
+             date= MMWRweek2Date(MMWRyear=year, MMWRweek=weekN) ) %>%
+
   return(out)
 }
 
@@ -83,14 +89,38 @@ extract_fun_germ <- function(weekN){
 rsv_2022_23_germ <- pblapply(1:15,extract_fun_germ)
 
 #combine together results from all weeks
-rsv_2022_23.df <- bind_rows(rsv_2022_23_germ)
+rsv_2022_23.df <- bind_rows(rsv_2022_23_germ) %>%
+  rename(N_tests= `Anzahl eingesandter Proben*`)
 
 #fix formatting
 row.names(rsv_2022_23.df) <- NULL
 
-#export as .csv
-write.csv(rsv_2022_23.df,'./Data/Germany/extracted/rsv_2022_23.df.csv')
 
+#export as .csv
+write.csv(rsv_2022_23.df,'./Data/Germany/extracted/rsv_2022_23.archive.df.csv')
+
+rsv_2022_23.df.recent <- rsv_2022_23.df %>%
+  arrange(date, desc(vintage)) %>%
+  group_by(date) %>%
+  mutate(most_recent = row_number()) %>%
+  filter(most_recent==1)
+
+write.csv(rsv_2022_23.df.recent,'./Data/Germany/extracted/rsv_2022_23.most.recent.df.csv')
+
+```
+
+
+```{r}
+
+ggplot(rsv_2022_23.df, aes(x=date, y=RSV, group=vintage, col=vintage)) +
+  geom_line() +
+  theme_classic()
+
+ggplot(rsv_2022_23.df, aes(x=date, y=N_tests, group=vintage, col=vintage)) +
+  geom_line() +
+  theme_classic() +
+  ylim(0,NA) +
+  ggtitle("N Tests performed over time")
 ```
 
 
