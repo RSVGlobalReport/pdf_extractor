@@ -1,0 +1,96 @@
+---
+title: "pdfs"
+author: "Dan Weinberger"
+date: '2023-04-20'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#INSTALL JAVA (64 bit) ON YOUR MACHINE FIRST https://stackoverflow.com/questions/29522088/rjava-install-error-java-home-cannot-be-determined-from-the-registry
+
+#then add to path using cmd ; setx PATH "C:\Program Files\Java\jre1.8\bin\server;%PATH%"
+#Sys.setenv(JAVA_HOME="")
+# library(devtools)
+
+#install_github('ropensci/tabulizerjars')
+# install_github('ropensci/tabulizer')
+
+library(dplyr)
+library(pdftools)
+library(stringr)
+library(dplyr)
+library(tabulizer)
+library(magrittr)
+library(pbapply)
+```
+
+
+```{r}
+pdf.text <- pdftools::pdf_text("./Data/France/France_swhebdo_en_202314.pdf") 
+```
+
+page 5
+```{r}
+fr_extract <- function(in.pdf=pdf.text){
+    pdf.pg2 <- in.pdf[2]  #page 2
+    
+  # Search for the specified text string using regular expressions
+  match <- regexpr("\\b([[:alnum:]]+\\s+){2}positive\\s+for\\s+respiratory\\s+syncytial\\s+virus", pdf.pg2)
+
+  match <- regexpr("\\s+positive\\s+for\\s+respiratory\\s+syncytial\\s+virus", pdf.pg2)
+
+  rsv.stat.text <- substr(pdf.pg2, start= (match-20) ,stop= (match-1))
+  
+  fraction <- str_extract(rsv.stat.text, "\\d/\\d+")
+  num_denom <- strsplit(fraction, "/")[[1]]
+  numerator <- as.numeric(num_denom[1])
+  denominator <- as.numeric(num_denom[2])
+  
+   
+  
+    return(c('N_cases'=numerator, 'N_tests'=denominator))
+}
+
+fr_extract()
+
+
+```
+
+
+```{r}
+extract_fun_germ <- function(weekN){
+  weekN.pad <- str_pad(weekN, 2, pad = "0")
+
+  files.to.extract22_23 <- paste0("https://influenza.rki.de/Wochenberichte/2022_2023/","2023-",weekN.pad,'.pdf')
+
+  out <- extract_tables(files.to.extract22_23,pages = 4) %>%
+    extract2(1) %>%
+    as.data.frame() %>%
+    dplyr::filter(V1 %in% c('Anzahl eingesandter Proben*','RSV')) %>%
+    dplyr::select(V6) %>%
+    rename(N_current = V6) %>%
+    dplyr::mutate(N_current = as.numeric(N_current)) %>%
+    t() %>%
+    as.data.frame() %>%
+    rename(N_tests=V1, N_RSV=V2) %>%
+    mutate(wk=weekN)
+  return(out)
+}
+
+#specify which weeks you want data for and call the function
+rsv_2022_23_germ <- pblapply(1:15,extract_fun_germ)
+
+#combine together results from all weeks
+rsv_2022_23.df <- bind_rows(rsv_2022_23_germ)
+
+#fix formatting
+row.names(rsv_2022_23.df) <- NULL
+
+#export as .csv
+write.csv(rsv_2022_23.df,'./Data/Germany/extracted/rsv_2022_23.df.csv')
+
+```
+
+
